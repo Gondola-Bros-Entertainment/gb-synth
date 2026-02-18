@@ -97,7 +97,7 @@ noiseOsc n =
     noiseSeed = 42
 
     maxLcg :: Double
-    maxLcg = 2147483647.0
+    maxLcg = 4294967295.0
 
     lcgStep :: Word32 -> Word32
     lcgStep x = x * lcgMultiplier + lcgIncrement
