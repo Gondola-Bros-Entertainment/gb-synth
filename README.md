@@ -17,7 +17,7 @@
 
 gb-synth is a synthesis engine with a tracker-style song DSL for generating retro game music and sound effects. Define songs declaratively — chords, patterns, sections, instruments — and render to 16-bit mono PCM WAV at 22050 Hz.
 
-Built as a shared library for all [Gondola Bros](https://github.com/Gondola-Bros-Entertainment) games. Each game defines its own songs and SFX using the gb-synth API.
+Built as a shared library for all [Gondola Bros](https://github.com/Gondola-Bros-Entertainment) games. Each game defines its own songs and SFX using the gb-synth API. Companion to [gb-sprite](https://github.com/Gondola-Bros-Entertainment/gb-sprite) (procedural 2D graphics).
 
 **Features:**
 - 5 waveforms — sine, square, triangle, sawtooth, noise
@@ -38,6 +38,7 @@ src/GBSynth/
 ├── Instrument.hs   Synth (oscillator+ADSR) or Sample (pre-rendered buffer)
 ├── Pattern.hs      Tracker-style step grid (MOD/XM/IT inspired)
 ├── Song.hs         Sections + arrangement (intro/verse/chorus/outro)
+├── Synthesis.hs    Reusable SFX building blocks (sweeps, bursts, decays)
 ├── Render.hs       Song → [Int16] pipeline
 └── WAV.hs          16-bit mono PCM writer (22050 Hz)
 ```
@@ -150,6 +151,20 @@ data Song    = Song    { songTempo :: !Int, songStepsPerBeat :: !Int, songSectio
 renderSong    :: Song -> [Int16]                          -- full song pipeline
 renderSfx     :: Double -> [(Double, [Double])] -> [Int16] -- layer + normalize SFX
 layerWeighted :: [(Double, [Double])] -> [Double]          -- mix with per-signal gain
+```
+
+### Synthesis
+
+Reusable SFX building blocks — combine these to create any sound effect:
+
+```haskell
+sineSweep      :: Double -> Double -> Double -> Int -> [Double]         -- freq sweep
+sineSweepAD    :: Double -> Double -> Double -> Double -> Int -> [Double] -- sweep + decay
+noiseBurst     :: Double -> Int -> [Double]                             -- noise with decay
+squareWaveDecay :: Double -> Double -> Int -> [Double]                  -- square + decay
+expDecay       :: Double -> Double -> Double                            -- exponential decay
+attackDecay    :: Double -> Double -> Double -> Double                  -- attack-decay curve
+silence        :: Int -> [Double]                                       -- zero-filled gap
 ```
 
 ### WAV
