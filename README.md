@@ -1,12 +1,13 @@
 <div align="center">
 <h1>gb-synth</h1>
-<p><strong>Procedural Music Sequencer for GB Games</strong></p>
+<p><strong>Procedural Music & Sound Effect Synthesis</strong></p>
 <p>Pure Haskell — no audio files, no samples, no DAW. Just math.</p>
 <p><a href="#overview">Overview</a> · <a href="#architecture">Architecture</a> · <a href="#usage">Usage</a> · <a href="#api">API</a> · <a href="#example">Example</a></p>
 <p>
 
+[![CI](https://github.com/Gondola-Bros-Entertainment/gb-synth/actions/workflows/ci.yml/badge.svg)](https://github.com/Gondola-Bros-Entertainment/gb-synth/actions/workflows/ci.yml)
+[![Hackage](https://img.shields.io/hackage/v/gb-synth.svg)](https://hackage.haskell.org/package/gb-synth)
 ![Haskell](https://img.shields.io/badge/haskell-GHC%209.6-purple)
-![License](https://img.shields.io/badge/license-MIT-blue)
 
 </p>
 </div>
