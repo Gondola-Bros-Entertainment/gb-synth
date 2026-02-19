@@ -25,7 +25,10 @@ Companion to [gb-sprite](https://github.com/Gondola-Bros-Entertainment/gb-sprite
 - ADSR envelopes with 4 presets (percussive, shortPluck, longPad, organ)
 - Tracker-style step patterns with note sustain across rests
 - Structured songs with sections (intro/verse/chorus/outro) and repeats
-- Pre-rendered sample instruments for drums and percussion
+- 13 ready-to-use SFX presets (laser, explosion, coin, powerup, etc.)
+- Programmatic chord construction and progressions
+- Post-processing effects (bitCrush, echo, fade, reverse, mix)
+- Pre-rendered drum samples (kick, snare, hihat)
 - 16-bit mono PCM WAV output
 
 ---
@@ -40,6 +43,9 @@ src/GBSynth/
 ├── Pattern.hs      Tracker-style step grid (MOD/XM/IT inspired)
 ├── Song.hs         Sections + arrangement (intro/verse/chorus/outro)
 ├── Synthesis.hs    Reusable SFX building blocks (sweeps, bursts, decays)
+├── SFX.hs          13 ready-to-use sound effect presets
+├── Chord.hs        Programmatic chord construction and progressions
+├── Effects.hs      Post-processing (bitCrush, echo, fade, reverse, mix)
 ├── Render.hs       Song → [Int16] pipeline
 └── WAV.hs          16-bit mono PCM writer (22050 Hz)
 ```
@@ -67,7 +73,7 @@ Song → Sections → Tracks → Patterns → Notes → Oscillator + Envelope �
 Add to your `.cabal` file:
 
 ```cabal
-build-depends: gb-synth >= 0.1
+build-depends: gb-synth >= 0.2
 ```
 
 ### Generating WAVs
@@ -78,6 +84,19 @@ import GBSynth.WAV (writeWav)
 
 main :: IO ()
 main = writeWav "music.wav" (renderSong mySong)
+```
+
+### Quick SFX
+
+```haskell
+import GBSynth.SFX (laser, explosion, coin)
+import GBSynth.WAV (writeWav)
+
+main :: IO ()
+main = do
+  writeWav "laser.wav" laser
+  writeWav "explosion.wav" explosion
+  writeWav "coin.wav" coin
 ```
 
 ---
@@ -168,6 +187,58 @@ attackDecay    :: Double -> Double -> Double -> Double                  -- attac
 silence        :: Int -> [Double]                                       -- zero-filled gap
 ```
 
+### SFX
+
+13 ready-to-use sound effect presets, pre-rendered as `[Int16]`:
+
+```haskell
+laser     :: [Int16]   -- fire/shoot
+explosion :: [Int16]   -- kill/death
+impact    :: [Int16]   -- structural hit
+alert     :: [Int16]   -- wave start / alarm
+click     :: [Int16]   -- UI button
+powerup   :: [Int16]   -- upgrade/collect
+coin      :: [Int16]   -- pickup/reward
+jump      :: [Int16]   -- platformer jump
+heal      :: [Int16]   -- healing/restore
+defeat    :: [Int16]   -- game over
+
+-- Drum samples
+kickSample  :: [Int16]
+snareSample :: [Int16]
+hihatSample :: [Int16]
+```
+
+### Chord
+
+Programmatic chord construction from MIDI root notes:
+
+```haskell
+data Quality = Major | Minor | Diminished | Augmented | Sus2 | Sus4
+
+chord            :: Int -> Quality -> [Int]              -- root MIDI + quality → note list
+inversion        :: Int -> [Int] -> [Int]                -- nth inversion
+chordProgression :: [(Int, Quality)] -> [(Int, [Int])]   -- build full progression
+
+-- Built-in progressions
+pop1564      :: [(Int, [Int])]   -- I-V-vi-IV in C
+blues145     :: [(Int, [Int])]   -- 12-bar blues in A
+minorClassic :: [(Int, [Int])]   -- i-VI-III-VII in Am
+```
+
+### Effects
+
+Post-processing for rendered audio signals:
+
+```haskell
+bitCrush      :: Int -> [Double] -> [Double]       -- reduce bit depth for lo-fi crunch
+echo          :: Int -> Double -> [Double] -> [Double]  -- delay line with decay
+fadeIn         :: Int -> [Double] -> [Double]       -- linear fade in (N samples)
+fadeOut        :: Int -> [Double] -> [Double]       -- linear fade out (N samples)
+reverseSignal :: [Double] -> [Double]              -- reverse audio
+mix           :: [[Double]] -> [Double]            -- sum multiple signals
+```
+
 ### WAV
 
 ```haskell
@@ -181,14 +252,14 @@ writeWav    :: FilePath -> [Int16] -> IO ()
 
 ## Example
 
-A complete song with intro, verse, and chorus:
+A complete song using the Chord module for progressions:
 
 ```haskell
-import GBSynth.Envelope (ADSR (..), shortPluck, longPad)
+import GBSynth.Chord (Quality (..), chord, chordProgression)
 import GBSynth.Instrument (Instrument (..), bass, lead, pad)
-import GBSynth.Oscillator (Waveform (..))
 import GBSynth.Pattern (fromNotes, fromHits)
 import GBSynth.Render (renderSong)
+import GBSynth.SFX (kickSample)
 import GBSynth.Song (Section (..), Song (..), Track (..))
 import GBSynth.WAV (writeWav)
 
@@ -198,36 +269,37 @@ main = writeWav "song.wav" (renderSong mySong)
 mySong :: Song
 mySong = Song
   { songTempo = 120
-  , songStepsPerBeat = 4        -- 16th note grid
+  , songStepsPerBeat = 4
   , songSections = [intro, verse, chorus]
   }
 
--- Am - F - C - G chord progression
-chords :: [(Int, [Int])]
-chords =
-  [ (57, [57, 60, 64])   -- Am
-  , (53, [53, 57, 60])   -- F
-  , (48, [48, 52, 55])   -- C
-  , (55, [55, 59, 62])   -- G
-  ]
+-- Am - F - C - G using Chord module
+progression :: [(Int, [Int])]
+progression = chordProgression [(57, Minor), (53, Major), (48, Major), (55, Major)]
 
 -- Bass: root note sustained per chord (8 steps each)
 bassPat :: Pattern
 bassPat = fromNotes $ concatMap
   (\(root, _) -> Just root : replicate 7 Nothing)
-  chords
+  progression
 
 -- Arpeggio: root, 3rd, 5th, 3rd
 arpPat :: Pattern
 arpPat = fromNotes $ concatMap
-  (\(_, [n0, n1, n2]) ->
-    [Just n0, Nothing, Just n1, Nothing,
-     Just n2, Nothing, Just n1, Nothing])
-  chords
+  (\(_, notes) -> case notes of
+    (n0 : n1 : n2 : _) ->
+      [Just n0, Nothing, Just n1, Nothing,
+       Just n2, Nothing, Just n1, Nothing]
+    _ -> replicate 8 Nothing)
+  progression
 
 -- Kick on beats 1 and 3
 kickPat :: Pattern
 kickPat = fromHits 32 [0, 8, 16, 24]
+
+-- Pre-rendered kick from SFX module
+kickInstr :: Instrument
+kickInstr = Sample (map (\s -> fromIntegral s / 32768.0) kickSample) 1.0
 
 intro :: Section
 intro = Section "intro" 2
@@ -244,20 +316,22 @@ chorus = Section "chorus" 4
   [ Track bass bassPat 0.35
   , Track lead arpPat 0.35
   , Track pad  bassPat 0.20
-  , Track (Sample kickDrum 1.0) kickPat 0.30
+  , Track kickInstr kickPat 0.30
   ]
-
--- Pre-rendered kick drum sample
-kickDrum :: [Double]
-kickDrum = -- sine sweep 150→40 Hz with noise transient
-  ...
 ```
 
 ---
 
-## License
+## Build & Test
 
-MIT
+Requires [GHCup](https://www.haskell.org/ghcup/) with GHC >= 9.6.
+
+```bash
+cabal build                              # Build library
+cabal test                               # Run all tests (109 pure tests)
+cabal build --ghc-options="-Werror"      # Warnings as errors
+cabal haddock                            # Generate docs
+```
 
 ---
 
