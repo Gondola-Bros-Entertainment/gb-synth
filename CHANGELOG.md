@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.0.0
+
+### New Modules
+
+- **GBSynth.SFX**: 13 ready-to-use sound effect presets (laser, explosion, impact, alert, click, powerup, coin, jump, heal, defeat) plus pre-rendered drum samples (kickSample, snareSample, hihatSample). All built from synthesis primitives, no sample files.
+- **GBSynth.Chord**: Programmatic chord construction. `Quality` type (Major, Minor, Diminished, Augmented, Sus2, Sus4), `chord` / `inversion` / `chordProgression` builders, and built-in progressions (pop1564, blues145, minorClassic).
+- **GBSynth.Effects**: Post-processing effects — `bitCrush`, `echo`, `fadeIn`, `fadeOut`, `reverseSignal`, `mix`.
+
+### Bug Fixes
+
+- Eliminate partial functions: `tail` → `drop 1` in Oscillator and Synthesis, `maximum` / `foldl1` → safe `foldl'` with empty list guards in Render.
+
+### Internal
+
+- 109 pure tests (up from 60)
+- Metadata: cabal-version 3.0, stability experimental, CHANGELOG.md
+
 ## 0.1.0.0
 
 Initial release.
@@ -21,26 +38,3 @@ Initial release.
 - Native WAV file writer (RIFF/WAVE format)
 - 16-bit signed PCM encoding
 - No external audio dependencies
-
-### SFX Presets
-- 13 ready-to-use sound effects: laser, explosion, impact, alert, click, powerup, coin, jump, heal, defeat
-- Pre-rendered drum samples: kickSample, snareSample, hihatSample
-- All built from synthesis primitives, no sample files
-
-### Chord Construction
-- `Quality` type: Major, Minor, Diminished, Augmented, Sus2, Sus4
-- `chord`: root MIDI note + quality → chord voicing
-- `inversion`: 1st/2nd/nth chord inversions
-- `chordProgression`: build progressions from root-quality pairs
-- Built-in progressions: pop1564, blues145, minorClassic
-
-### Effects
-- `bitCrush`: reduce bit depth for lo-fi retro sound
-- `echo`: simple delay line with decay
-- `fadeIn` / `fadeOut`: linear amplitude fades
-- `reverseSignal`: reverse audio data
-- `mix`: sum multiple signals with equal gain
-
-### Internal
-- 109 pure tests: oscillator waveforms, envelope stages, pattern sequencing, rendering pipeline, SFX presets, chord intervals, effects processing
-- All partial functions eliminated (safe folds, empty list guards)
