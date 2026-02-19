@@ -6,11 +6,28 @@ module Main (main) where
 import qualified Data.ByteString as BS
 import Data.Int (Int16)
 import Data.Word (Word8)
+import GBSynth.Chord (Quality (..), chord, chordProgression, inversion)
+import GBSynth.Effects (bitCrush, echo, fadeIn, fadeOut, mix, reverseSignal)
 import GBSynth.Envelope (ADSR (..), percussive, renderEnvelope, shortPluck)
 import GBSynth.Instrument (Instrument (..), renderNote)
 import GBSynth.Oscillator (Waveform (..), noteFreq, oscillate)
 import GBSynth.Pattern (NoteEvent (..), Pattern (..), fromHits, fromNotes, restPattern)
 import GBSynth.Render (layerWeighted, normalizeSignal, renderSfx, renderSong)
+import GBSynth.SFX
+  ( alert,
+    click,
+    coin,
+    defeat,
+    explosion,
+    heal,
+    hihatSample,
+    impact,
+    jump,
+    kickSample,
+    laser,
+    powerup,
+    snareSample,
+  )
 import GBSynth.Song (Section (..), Song (..), Track (..))
 import GBSynth.Synthesis
   ( attackDecay,
@@ -102,6 +119,9 @@ main = do
         ++ testSynthesis
         ++ testInstrument
         ++ wavTests
+        ++ testSFX
+        ++ testChord
+        ++ testEffects
     )
 
 -- ---------------------------------------------------------------------------
@@ -505,6 +525,177 @@ testWavRoundtrip = do
         assertEqual "msToSamples 1s" sampleRate (msToSamples 1000)
       )
     ]
+
+-- ---------------------------------------------------------------------------
+-- SFX tests
+-- ---------------------------------------------------------------------------
+
+testSFX :: [(String, TestResult)]
+testSFX =
+  [ sfxNonEmpty "laser" laser,
+    sfxBounded "laser" laser,
+    sfxNonEmpty "explosion" explosion,
+    sfxBounded "explosion" explosion,
+    sfxNonEmpty "impact" impact,
+    sfxBounded "impact" impact,
+    sfxNonEmpty "alert" alert,
+    sfxBounded "alert" alert,
+    sfxNonEmpty "click" click,
+    sfxBounded "click" click,
+    sfxNonEmpty "powerup" powerup,
+    sfxBounded "powerup" powerup,
+    sfxNonEmpty "coin" coin,
+    sfxBounded "coin" coin,
+    sfxNonEmpty "jump" jump,
+    sfxBounded "jump" jump,
+    sfxNonEmpty "heal" heal,
+    sfxBounded "heal" heal,
+    sfxNonEmpty "defeat" defeat,
+    sfxBounded "defeat" defeat,
+    sfxNonEmpty "kickSample" kickSample,
+    sfxBounded "kickSample" kickSample,
+    sfxNonEmpty "snareSample" snareSample,
+    sfxBounded "snareSample" snareSample,
+    sfxNonEmpty "hihatSample" hihatSample,
+    sfxBounded "hihatSample" hihatSample
+  ]
+
+-- | Assert an SFX preset produces non-empty output.
+sfxNonEmpty :: String -> [Int16] -> (String, TestResult)
+sfxNonEmpty name samples =
+  (name ++ " is non-empty", assertTrue (name ++ " non-empty") (not (null samples)))
+
+-- | Assert all samples are within Int16 bounds.
+sfxBounded :: String -> [Int16] -> (String, TestResult)
+sfxBounded name samples =
+  ( name ++ " samples bounded",
+    assertTrue
+      (name ++ " bounded")
+      (all (\s -> s >= minBound && s <= maxBound) samples)
+  )
+
+-- ---------------------------------------------------------------------------
+-- Chord tests
+-- ---------------------------------------------------------------------------
+
+testChord :: [(String, TestResult)]
+testChord =
+  [ ( "Major chord intervals: root, +4, +7",
+      assertEqual "C Major" [60, 64, 67] (chord middleC Major)
+    ),
+    ( "Minor chord intervals: root, +3, +7",
+      assertEqual "A Minor" [57, 60, 64] (chord concertA Minor)
+    ),
+    ( "Diminished chord intervals: root, +3, +6",
+      assertEqual "B Dim" [59, 62, 65] (chord 59 Diminished)
+    ),
+    ( "Augmented chord intervals: root, +4, +8",
+      assertEqual "C Aug" [60, 64, 68] (chord middleC Augmented)
+    ),
+    ( "Sus2 chord intervals: root, +2, +7",
+      assertEqual "C Sus2" [60, 62, 67] (chord middleC Sus2)
+    ),
+    ( "Sus4 chord intervals: root, +5, +7",
+      assertEqual "C Sus4" [60, 65, 67] (chord middleC Sus4)
+    ),
+    ( "1st inversion moves root up an octave",
+      assertEqual "C/E" [64, 67, 72] (inversion 1 [60, 64, 67])
+    ),
+    ( "2nd inversion moves two lowest up",
+      assertEqual "C/G" [67, 72, 76] (inversion 2 [60, 64, 67])
+    ),
+    ( "inversion 0 is identity",
+      assertEqual "no inversion" [60, 64, 67] (inversion 0 [60, 64, 67])
+    ),
+    ( "chordProgression builds pairs",
+      let prog = chordProgression [(60, Major), (65, Major)]
+       in assertEqual "progression" [(60, [60, 64, 67]), (65, [65, 69, 72])] prog
+    )
+  ]
+  where
+    middleC :: Int
+    middleC = 60
+
+    concertA :: Int
+    concertA = 57
+
+-- ---------------------------------------------------------------------------
+-- Effects tests
+-- ---------------------------------------------------------------------------
+
+testEffects :: [(String, TestResult)]
+testEffects =
+  [ ( "bitCrush clamps to levels",
+      let crushed = bitCrush crushedBits [0.5, -0.5, 0.25]
+       in assertTrue
+            "crushed values"
+            (all (\s -> s >= -1.0 && s <= 1.0) crushed)
+    ),
+    ( "bitCrush preserves length",
+      assertEqual "crush length" signalLen (length (bitCrush crushedBits testSignal))
+    ),
+    ( "echo extends signal length",
+      let delayed = echo echoDelay echoDecay testSignal
+       in assertEqual "echo length" (signalLen + echoDelay) (length delayed)
+    ),
+    ( "echo preserves original signal start",
+      let delayed = echo echoDelay echoDecay testSignal
+       in assertApprox "echo start" 1.0 (head delayed) 0.001
+    ),
+    ( "fadeIn starts at zero",
+      let faded = fadeIn fadeDur testSignal
+       in assertApprox "fade start" 0.0 (head faded) 0.001
+    ),
+    ( "fadeIn preserves length",
+      assertEqual "fadeIn length" signalLen (length (fadeIn fadeDur testSignal))
+    ),
+    ( "fadeOut ends near zero",
+      let faded = fadeOut fadeDur testSignal
+       in assertTrue "fade end" (abs (last faded) < 0.01)
+    ),
+    ( "fadeOut preserves length",
+      assertEqual "fadeOut length" signalLen (length (fadeOut fadeDur testSignal))
+    ),
+    ( "reverseSignal is correct",
+      assertEqual "reversed" [3.0, 2.0, 1.0] (reverseSignal [1.0, 2.0, 3.0])
+    ),
+    ( "reverseSignal preserves length",
+      assertEqual "reverse length" signalLen (length (reverseSignal testSignal))
+    ),
+    ( "mix combines signals",
+      let mixed = mix [[1.0, 0.0], [0.0, 1.0]]
+       in assertEqual "mixed" [1.0, 1.0] mixed
+    ),
+    ( "mix pads shorter signals",
+      let mixed = mix [[1.0], [1.0, 1.0, 1.0]]
+       in assertEqual "mix length" 3 (length mixed)
+    ),
+    ( "mix empty is empty",
+      assertEqual "mix empty" ([] :: [Double]) (mix [])
+    )
+  ]
+  where
+    signalLen :: Int
+    signalLen = 100
+
+    testSignal :: [Double]
+    testSignal = replicate signalLen 1.0
+
+    crushedBits :: Int
+    crushedBits = 4
+
+    echoDelay :: Int
+    echoDelay = 50
+
+    echoDecay :: Double
+    echoDecay = 0.5
+
+    fadeDur :: Int
+    fadeDur = 50
+
+-- ---------------------------------------------------------------------------
+-- Helpers
+-- ---------------------------------------------------------------------------
 
 -- | Decode a little-endian 16-bit unsigned value.
 fromLE16 :: [Word8] -> Int

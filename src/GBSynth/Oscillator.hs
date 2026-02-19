@@ -56,7 +56,7 @@ sineOsc :: Double -> Int -> [Double]
 sineOsc freq n =
   let srf = fromIntegral sampleRate
       delta = freq / srf
-      phases = take n (tail (scanl (+) 0.0 (repeat delta)))
+      phases = take n (drop 1 (scanl (+) 0.0 (repeat delta)))
    in map (\ph -> sin (ph * twoPi)) phases
 
 -- | Square wave: +1 for first half of cycle, -1 for second half.

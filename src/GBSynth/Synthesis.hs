@@ -54,7 +54,7 @@ sineSweep startHz endHz decayRate n =
         [ (startHz + (endHz - startHz) * (fromIntegral i / nf)) / srf
         | i <- [0 .. n - 1]
         ]
-      phases = tail (scanl (+) 0.0 deltas)
+      phases = drop 1 (scanl (+) 0.0 deltas)
    in zipWith
         ( \i ph ->
             let t = fromIntegral i / nf
@@ -78,7 +78,7 @@ sineSweepAD startHz endHz attackMs decayRate n =
         [ (startHz + (endHz - startHz) * (fromIntegral i / nf)) / srf
         | i <- [0 .. n - 1]
         ]
-      phases = tail (scanl (+) 0.0 deltas)
+      phases = drop 1 (scanl (+) 0.0 deltas)
    in zipWith
         ( \i ph ->
             let t = fromIntegral i / fromIntegral sampleRate

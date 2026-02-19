@@ -17,7 +17,7 @@
 
 gb-synth is a synthesis engine with a tracker-style song DSL for generating retro game music and sound effects. Define songs declaratively — chords, patterns, sections, instruments — and render to 16-bit mono PCM WAV at 22050 Hz.
 
-Built as a shared library for all [Gondola Bros](https://github.com/Gondola-Bros-Entertainment) games. Each game defines its own songs and SFX using the gb-synth API. Companion to [gb-sprite](https://github.com/Gondola-Bros-Entertainment/gb-sprite) (procedural 2D graphics).
+Companion to [gb-sprite](https://github.com/Gondola-Bros-Entertainment/gb-sprite) (procedural 2D graphics).
 
 **Features:**
 - 5 waveforms — sine, square, triangle, sawtooth, noise

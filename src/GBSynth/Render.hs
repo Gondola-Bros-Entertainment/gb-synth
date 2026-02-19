@@ -39,15 +39,17 @@ renderBuffer len buf = [Map.findWithDefault 0.0 i buf | i <- [0 .. len - 1]]
 
 -- | Layer signals with explicit per-signal gain.
 layerWeighted :: [(Double, [Double])] -> [Double]
+layerWeighted [] = []
 layerWeighted pairs =
-  let maxLen = maximum (map (length . snd) pairs)
+  let maxLen = foldl' (\acc (_, s) -> max acc (length s)) 0 pairs
       padded = map (\(g, s) -> map (* g) (s ++ replicate (maxLen - length s) 0.0)) pairs
-   in foldl1 (zipWith (+)) padded
+   in foldl' (zipWith (+)) (replicate maxLen 0.0) padded
 
 -- | Normalize a signal and scale to the given peak level.
 normalizeSignal :: Double -> [Double] -> [Int16]
+normalizeSignal _ [] = []
 normalizeSignal level signal =
-  let peak = maximum (map abs signal)
+  let peak = foldl' (\acc x -> max acc (abs x)) 0.0 signal
       normalized = if peak > minPeak then map (/ peak) signal else signal
    in map (toSample . (* level)) normalized
   where
@@ -85,9 +87,9 @@ renderSectionOnce samplesPerStep tracks =
     _ ->
       let rendered = map (renderTrack samplesPerStep) tracks
           gains = map trkGain tracks
-          maxLen = maximum (map length rendered)
+          maxLen = foldl' (\acc s -> max acc (length s)) 0 rendered
           padded = map (\s -> s ++ replicate (maxLen - length s) 0.0) rendered
-       in foldl1 (zipWith (+)) (zipWith (\g s -> map (* g) s) gains padded)
+       in foldl' (zipWith (+)) (replicate maxLen 0.0) (zipWith (\g s -> map (* g) s) gains padded)
 
 -- | Render a single track: step through the pattern, rendering notes.
 --

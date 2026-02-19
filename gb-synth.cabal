@@ -1,7 +1,8 @@
-cabal-version: 2.4
+cabal-version: 3.0
 name:          gb-synth
 version:       0.1.0.0
-synopsis:      Procedural music sequencer for GB games
+stability:     experimental
+synopsis:      Procedural music and sound effect synthesis
 description:
   A synthesis engine with tracker-style song DSL for generating
   retro game music and sound effects. Pure Haskell — no audio files,
@@ -27,11 +28,14 @@ source-repository head
 
 library
   exposed-modules:
+    GBSynth.Chord
+    GBSynth.Effects
     GBSynth.Envelope
     GBSynth.Instrument
     GBSynth.Oscillator
     GBSynth.Pattern
     GBSynth.Render
+    GBSynth.SFX
     GBSynth.Song
     GBSynth.Synthesis
     GBSynth.WAV
