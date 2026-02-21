@@ -222,8 +222,8 @@ chordProgression :: [(Int, Quality)] -> [(Int, [Int])]   -- build full progressi
 
 -- Built-in progressions
 pop1564      :: [(Int, [Int])]   -- I-V-vi-IV in C
-blues145     :: [(Int, [Int])]   -- 12-bar blues in A
-minorClassic :: [(Int, [Int])]   -- i-VI-III-VII in Am
+blues145     :: [(Int, [Int])]   -- I-IV-V in C
+minorClassic :: [(Int, [Int])]   -- i-iv-V in Am
 ```
 
 ### Effects
@@ -257,7 +257,7 @@ A complete song using the Chord module for progressions:
 ```haskell
 import GBSynth.Chord (Quality (..), chord, chordProgression)
 import GBSynth.Instrument (Instrument (..), bass, lead, pad)
-import GBSynth.Pattern (fromNotes, fromHits)
+import GBSynth.Pattern (Pattern, fromNotes, fromHits)
 import GBSynth.Render (renderSong)
 import GBSynth.SFX (kickSample)
 import GBSynth.Song (Section (..), Song (..), Track (..))
