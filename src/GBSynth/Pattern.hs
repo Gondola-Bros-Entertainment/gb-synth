@@ -54,7 +54,7 @@ fromNotes notes =
 --
 -- @fromHits totalSteps hitSteps@ creates a pattern of @totalSteps@ length
 -- with 'NoteOn' at each index in @hitSteps@ and 'NoteOff' elsewhere.
--- The MIDI note is fixed at 0 (ignored by 'Sample' instruments).
+-- The MIDI note is fixed at 0 (ignored by 'GBSynth.Instrument.Sample' instruments).
 fromHits :: Int -> [Int] -> Pattern
 fromHits len hits =
   Pattern

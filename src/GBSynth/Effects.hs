@@ -80,7 +80,7 @@ reverseSignal = reverse
 -- | Mix multiple signals together with equal gain.
 --
 -- Shorter signals are zero-padded to match the longest. The output
--- is the sum of all inputs (no normalisation — apply 'normalizeSignal'
+-- is the sum of all inputs (no normalisation — apply 'GBSynth.Render.normalizeSignal'
 -- afterwards if needed).
 mix :: [[Double]] -> [Double]
 mix [] = []
