@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0.1
+
+- Fix Haddock cross-references in Effects and Pattern modules.
+- Fix README chord progression descriptions and missing Pattern import.
+- Remove `-O2` from library and test ghc-options (consumers set their own optimization).
+
 ## 0.2.0.0
 
 ### New Modules
