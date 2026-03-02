@@ -11,7 +11,7 @@ description:
   Define songs declaratively with chords, patterns, sections, and
   instruments. Render to 16-bit mono PCM WAV at 22050 Hz.
 
-license:       MIT
+license:       BSD-3-Clause
 license-file:  LICENSE
 author:        Devon Tomlin
 maintainer:    devon.tomlin@novavero.ai
