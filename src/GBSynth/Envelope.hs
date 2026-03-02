@@ -1,7 +1,7 @@
 -- | ADSR envelope generator.
 --
--- Four-stage envelope: Attack (linear 0→1), Decay (exponential 1→sustain),
--- Sustain (hold), Release (exponential sustain→0).
+-- Four-stage envelope: Attack (linear 0→1), Decay (linear 1→sustain),
+-- Sustain (hold), Release (linear sustain→0).
 module GBSynth.Envelope
   ( -- * Types
     ADSR (..),
