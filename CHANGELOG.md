@@ -2,9 +2,7 @@
 
 ## 0.2.0.2
 
-### License
-
-- Change license from MIT to BSD-3-Clause to match Haskell ecosystem convention.
+- Change license from MIT to BSD-3-Clause.
 
 ### Documentation
 
