@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.0.2
+
+### License
+
+- Change license from MIT to BSD-3-Clause to match Haskell ecosystem convention.
+
+### Documentation
+
+- Fix Envelope module documentation (decay/release described as "exponential" but implementation is linear).
+- Add gb-vector as ecosystem companion in README.
+
+### Internal
+
+- CI: cross-platform build matrix (Linux, macOS, Windows).
+
 ## 0.2.0.1
 
 - Fix Haddock cross-references in Effects and Pattern modules.

@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name:          gb-synth
-version:       0.2.0.1
+version:       0.2.0.2
 stability:     experimental
 synopsis:      Procedural music and sound effect synthesis
 description:
