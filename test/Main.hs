@@ -40,7 +40,7 @@ import GBSynth.Synthesis
   )
 import GBSynth.WAV (msToSamples, sampleRate, toSample, writeWav)
 import System.Exit (exitFailure, exitSuccess)
-import System.IO (hFlush, stdout)
+import System.IO (hClose, hFlush, openTempFile, stdout)
 
 -- ---------------------------------------------------------------------------
 -- Test harness
@@ -479,7 +479,8 @@ testInstrument =
 testWavRoundtrip :: IO [(String, TestResult)]
 testWavRoundtrip = do
   let samples = [0, 1000, -1000, 32767, -32768] :: [Int16]
-      path = "/tmp/gb-synth-test.wav"
+  (path, h) <- openTempFile "." "gb-synth-test.wav"
+  hClose h
   writeWav path samples
   raw <- BS.readFile path
   let bytes = BS.unpack raw
