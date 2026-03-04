@@ -5,14 +5,23 @@ module Main (main) where
 
 import qualified Data.ByteString as BS
 import Data.Int (Int16)
+import qualified Data.Map.Strict as Map
 import Data.Word (Word8)
-import GBSynth.Chord (Quality (..), chord, chordProgression, inversion)
+import GBSynth.Chord
+  ( Quality (..),
+    blues145,
+    chord,
+    chordProgression,
+    inversion,
+    minorClassic,
+    pop1564,
+  )
 import GBSynth.Effects (bitCrush, echo, fadeIn, fadeOut, mix, reverseSignal)
-import GBSynth.Envelope (ADSR (..), percussive, renderEnvelope, shortPluck)
-import GBSynth.Instrument (Instrument (..), renderNote)
+import GBSynth.Envelope (ADSR (..), longPad, organ, percussive, renderEnvelope, shortPluck)
+import GBSynth.Instrument (Instrument (..), bass, lead, pad, renderNote)
 import GBSynth.Oscillator (Waveform (..), noteFreq, oscillate)
 import GBSynth.Pattern (NoteEvent (..), Pattern (..), fromHits, fromNotes, restPattern)
-import GBSynth.Render (layerWeighted, normalizeSignal, renderSfx, renderSong)
+import GBSynth.Render (layerWeighted, mixAt, normalizeSignal, renderBuffer, renderSfx, renderSong)
 import GBSynth.SFX
   ( alert,
     click,
@@ -28,7 +37,7 @@ import GBSynth.SFX
     powerup,
     snareSample,
   )
-import GBSynth.Song (Section (..), Song (..), Track (..))
+import GBSynth.Song (Section (..), Song (..), Track (..), section, song, track)
 import GBSynth.Synthesis
   ( attackDecay,
     expDecay,
@@ -114,14 +123,21 @@ main = do
     ( testNoteFreq
         ++ testOscillator
         ++ testEnvelope
+        ++ testEnvelopePresets
         ++ testPattern
         ++ testRender
+        ++ testRenderUtils
         ++ testSynthesis
+        ++ testSynthesisEdge
         ++ testInstrument
+        ++ testInstrumentPresets
         ++ wavTests
         ++ testSFX
         ++ testChord
+        ++ testChordProgressions
         ++ testEffects
+        ++ testEffectsEdge
+        ++ testSong
     )
 
 -- ---------------------------------------------------------------------------
@@ -196,23 +212,28 @@ testOscillator =
 testEnvelope :: [(String, TestResult)]
 testEnvelope =
   [ ( "envelope starts at 0 (attack phase)",
-      assertApprox "env start" 0.0 (head env) 0.01
+      case env of
+        (firstSample : _) -> assertApprox "env start" 0.0 firstSample 0.01
+        [] -> Left "env: empty list"
     ),
     ( "envelope reaches peak near 1.0",
       assertTrue "env peak" (peakVal > 0.9)
     ),
     ( "envelope sustain holds at sustain level",
-      let sustainSample = env !! sustainIdx
-       in assertApprox "env sustain" 0.3 sustainSample 0.05
+      case drop sustainIdx env of
+        (sustainSample : _) -> assertApprox "env sustain" 0.3 sustainSample 0.05
+        [] -> Left "env: sustain index out of bounds"
     ),
     ( "envelope ends near 0 (release phase)",
-      let lastSample = last env
-       in assertTrue "env release" (lastSample < 0.1)
+      case reverse env of
+        (lastSample : _) -> assertTrue "env release" (lastSample < 0.1)
+        [] -> Left "env: empty list"
     ),
     ( "percussive envelope decays quickly",
       let percEnv = renderEnvelope percussive percNoteOn percTotal
-          midpoint = percEnv !! (percTotal `div` 2)
-       in assertTrue "percussive decay" (midpoint < 0.1)
+       in case drop (percTotal `div` 2) percEnv of
+            (midpoint : _) -> assertTrue "percussive decay" (midpoint < 0.1)
+            [] -> Left "percEnv: midpoint index out of bounds"
     )
   ]
   where
@@ -254,19 +275,27 @@ testPattern =
       assertEqual "fromNotes events" inputLen (length (patEvents pat))
     ),
     ( "fromNotes Nothing becomes Rest",
-      assertEqual "rest event" Rest (patEvents pat !! 1)
+      case drop 1 (patEvents pat) of
+        (secondEvent : _) -> assertEqual "rest event" Rest secondEvent
+        [] -> Left "patEvents: index 1 out of bounds"
     ),
     ( "fromNotes Just becomes NoteOn",
-      assertEqual "note event" (NoteOn 60 1.0) (head (patEvents pat))
+      case patEvents pat of
+        (firstEvent : _) -> assertEqual "note event" (NoteOn 60 1.0) firstEvent
+        [] -> Left "patEvents: empty"
     ),
     ( "fromHits correct step count",
       assertEqual "fromHits steps" hitPatLen (patSteps hitPat)
     ),
     ( "fromHits has NoteOn at hit positions",
-      assertEqual "hit at 0" (NoteOn 0 1.0) (head (patEvents hitPat))
+      case patEvents hitPat of
+        (firstEvent : _) -> assertEqual "hit at 0" (NoteOn 0 1.0) firstEvent
+        [] -> Left "hitPat events: empty"
     ),
     ( "fromHits has NoteOff at non-hit positions",
-      assertEqual "off at 1" NoteOff (patEvents hitPat !! 1)
+      case drop 1 (patEvents hitPat) of
+        (secondEvent : _) -> assertEqual "off at 1" NoteOff secondEvent
+        [] -> Left "hitPat events: index 1 out of bounds"
     ),
     ( "restPattern all rests",
       assertTrue "all rests" (all (== Rest) (patEvents (restPattern restLen)))
@@ -325,13 +354,13 @@ testRender =
        in assertTrue "peak near max" (peak > 30000)
     ),
     ( "renderSong produces non-empty output",
-      assertTrue "song output" (not (null (renderSong testSong)))
+      assertTrue "song output" (not (null (renderSong renderTestSong)))
     ),
     ( "renderSong sample count matches expected",
       let samplesPerStep = sampleRate * secondsPerMinute `div` (testBpm * testStepsPerBeat)
           expectedSteps = testPatLen * testRepeats
           expectedSamples = samplesPerStep * expectedSteps
-          actual = length (renderSong testSong)
+          actual = length (renderSong renderTestSong)
        in assertEqual "song sample count" expectedSamples actual
     )
   ]
@@ -351,8 +380,8 @@ testRender =
     secondsPerMinute :: Int
     secondsPerMinute = 60
 
-    testSong :: Song
-    testSong =
+    renderTestSong :: Song
+    renderTestSong =
       Song
         { songTempo = testBpm,
           songStepsPerBeat = testStepsPerBeat,
@@ -468,7 +497,9 @@ testInstrument =
       let buffer = [1.0]
           inst = Sample buffer 0.5
           result = renderNote inst 0 1
-       in assertApprox "gain applied" 0.5 (head result) 0.001
+       in case result of
+            (firstSample : _) -> assertApprox "gain applied" 0.5 firstSample 0.001
+            [] -> Left "renderNote: empty result"
     )
   ]
 
@@ -641,18 +672,24 @@ testEffects =
     ),
     ( "echo preserves original signal start",
       let delayed = echo echoDelay echoDecay testSignal
-       in assertApprox "echo start" 1.0 (head delayed) 0.001
+       in case delayed of
+            (firstSample : _) -> assertApprox "echo start" 1.0 firstSample 0.001
+            [] -> Left "echo: empty result"
     ),
     ( "fadeIn starts at zero",
       let faded = fadeIn fadeDur testSignal
-       in assertApprox "fade start" 0.0 (head faded) 0.001
+       in case faded of
+            (firstSample : _) -> assertApprox "fade start" 0.0 firstSample 0.001
+            [] -> Left "fadeIn: empty result"
     ),
     ( "fadeIn preserves length",
       assertEqual "fadeIn length" signalLen (length (fadeIn fadeDur testSignal))
     ),
     ( "fadeOut ends near zero",
       let faded = fadeOut fadeDur testSignal
-       in assertTrue "fade end" (abs (last faded) < 0.01)
+       in case reverse faded of
+            (lastSample : _) -> assertTrue "fade end" (abs lastSample < 0.01)
+            [] -> Left "fadeOut: empty result"
     ),
     ( "fadeOut preserves length",
       assertEqual "fadeOut length" signalLen (length (fadeOut fadeDur testSignal))
@@ -693,6 +730,321 @@ testEffects =
 
     fadeDur :: Int
     fadeDur = 50
+
+-- ---------------------------------------------------------------------------
+-- Song tests
+-- ---------------------------------------------------------------------------
+
+testSong :: [(String, TestResult)]
+testSong =
+  [ ( "track smart constructor matches Track",
+      let t = track testInst testPat testGain
+       in assertEqual "track" (Track testInst testPat testGain) t
+    ),
+    ( "section smart constructor matches Section",
+      let s = section "verse" sectionRepeats [Track testInst testPat testGain]
+       in assertEqual "section" (Section "verse" sectionRepeats [Track testInst testPat testGain]) s
+    ),
+    ( "song smart constructor matches Song",
+      let s = song testTempo testSteps [Section "intro" 1 []]
+       in assertEqual "song" (Song testTempo testSteps [Section "intro" 1 []]) s
+    ),
+    ( "Song field accessors work",
+      let s = Song testTempo testSteps []
+       in assertEqual "tempo" testTempo (songTempo s)
+    ),
+    ( "Section secName accessor",
+      let s = Section "chorus" sectionRepeats []
+       in assertEqual "secName" "chorus" (secName s)
+    ),
+    ( "Section secRepeats accessor",
+      let s = Section "chorus" sectionRepeats []
+       in assertEqual "secRepeats" sectionRepeats (secRepeats s)
+    ),
+    ( "Track trkGain accessor",
+      let t = Track testInst testPat testGain
+       in assertApprox "trkGain" testGain (trkGain t) 0.001
+    ),
+    ( "renderSong empty sections is empty",
+      assertTrue "empty song" (null (renderSong (Song testTempo testSteps [])))
+    ),
+    ( "renderSong with repeats doubles length",
+      let singleSong = Song testTempo testSteps [Section "a" 1 songTracks]
+          doubleSong = Song testTempo testSteps [Section "a" sectionRepeats songTracks]
+          singleLen = length (renderSong singleSong)
+          doubleLen = length (renderSong doubleSong)
+       in assertEqual "double repeats" (singleLen * sectionRepeats) doubleLen
+    ),
+    ( "renderSong multi-section concatenates",
+      let sec1 = Section "a" 1 songTracks
+          sec2 = Section "b" 1 songTracks
+          twoSec = Song testTempo testSteps [sec1, sec2]
+          oneSec = Song testTempo testSteps [sec1]
+          twoLen = length (renderSong twoSec)
+          oneLen = length (renderSong oneSec)
+       in assertEqual "multi-section" (oneLen * multiSectionFactor) twoLen
+    )
+  ]
+  where
+    testInst :: Instrument
+    testInst = Synth Sine shortPluck 0.5
+
+    testPat :: Pattern
+    testPat = fromNotes [Just 60, Nothing, Just 64, Nothing]
+
+    testGain :: Double
+    testGain = 0.8
+
+    testTempo :: Int
+    testTempo = 120
+
+    testSteps :: Int
+    testSteps = 4
+
+    sectionRepeats :: Int
+    sectionRepeats = 2
+
+    multiSectionFactor :: Int
+    multiSectionFactor = 2
+
+    songTracks :: [Track]
+    songTracks = [Track testInst testPat testGain]
+
+-- ---------------------------------------------------------------------------
+-- Envelope preset tests
+-- ---------------------------------------------------------------------------
+
+testEnvelopePresets :: [(String, TestResult)]
+testEnvelopePresets =
+  [ ( "longPad has slow attack",
+      assertApprox "longPad attack" 0.08 (adsrAttack longPad) 0.001
+    ),
+    ( "longPad has full sustain",
+      assertApprox "longPad sustain" 1.0 (adsrSustain longPad) 0.001
+    ),
+    ( "organ has instant attack",
+      assertTrue "organ attack" (adsrAttack organ < 0.01)
+    ),
+    ( "organ has full sustain",
+      assertApprox "organ sustain" 1.0 (adsrSustain organ) 0.001
+    ),
+    ( "percussive has zero sustain",
+      assertApprox "percussive sustain" 0.0 (adsrSustain percussive) 0.001
+    ),
+    ( "shortPluck has low sustain",
+      assertApprox "shortPluck sustain" 0.3 (adsrSustain shortPluck) 0.001
+    ),
+    ( "renderEnvelope zero-length is empty",
+      assertTrue "zero env" (null (renderEnvelope shortPluck 0 0))
+    )
+  ]
+
+-- ---------------------------------------------------------------------------
+-- Instrument preset tests
+-- ---------------------------------------------------------------------------
+
+testInstrumentPresets :: [(String, TestResult)]
+testInstrumentPresets =
+  [ ( "bass preset produces output",
+      let result = renderNote bass middleC presetDur
+       in assertEqual "bass length" presetDur (length result)
+    ),
+    ( "lead preset produces output",
+      let result = renderNote lead middleC presetDur
+       in assertEqual "lead length" presetDur (length result)
+    ),
+    ( "pad preset produces output",
+      let result = renderNote pad middleC presetDur
+       in assertEqual "pad length" presetDur (length result)
+    ),
+    ( "bass preset output in range",
+      let result = renderNote bass middleC presetDur
+       in assertTrue "bass range" (all (\s -> s >= -1.0 && s <= 1.0) result)
+    ),
+    ( "renderNote Synth zero duration is empty",
+      let inst = Synth Sine shortPluck 0.5
+       in assertTrue "zero dur" (null (renderNote inst middleC 0))
+    ),
+    ( "renderNote Sample empty buffer pads",
+      let inst = Sample [] 1.0
+       in assertEqual "empty buf pad" presetDur (length (renderNote inst 0 presetDur))
+    )
+  ]
+  where
+    presetDur :: Int
+    presetDur = 1000
+
+    middleC :: Int
+    middleC = 60
+
+-- ---------------------------------------------------------------------------
+-- Chord progression tests
+-- ---------------------------------------------------------------------------
+
+testChordProgressions :: [(String, TestResult)]
+testChordProgressions =
+  [ ( "pop1564 has 4 chords",
+      assertEqual "pop len" popLen (length pop1564)
+    ),
+    ( "pop1564 starts on C",
+      case pop1564 of
+        ((root, _) : _) -> assertEqual "pop root" popRoot root
+        [] -> Left "pop1564: empty"
+    ),
+    ( "blues145 has 3 chords",
+      assertEqual "blues len" bluesLen (length blues145)
+    ),
+    ( "minorClassic has 3 chords",
+      assertEqual "minor len" minorClassicLen (length minorClassic)
+    ),
+    ( "inversion on empty list is empty",
+      assertEqual "inv empty" ([] :: [Int]) (inversion 1 [])
+    ),
+    ( "negative inversion is identity",
+      assertEqual "neg inv" [60, 64, 67] (inversion (-1) [60, 64, 67])
+    ),
+    ( "chord Diminished",
+      assertEqual "B dim" [59, 62, 65] (chord 59 Diminished)
+    ),
+    ( "chordProgression preserves order",
+      let prog = chordProgression [(60, Major), (65, Minor), (67, Major)]
+       in assertEqual "prog len" progLen (length prog)
+    )
+  ]
+  where
+    popLen :: Int
+    popLen = 4
+
+    popRoot :: Int
+    popRoot = 60
+
+    bluesLen :: Int
+    bluesLen = 3
+
+    minorClassicLen :: Int
+    minorClassicLen = 3
+
+    progLen :: Int
+    progLen = 3
+
+-- ---------------------------------------------------------------------------
+-- Render utility tests
+-- ---------------------------------------------------------------------------
+
+testRenderUtils :: [(String, TestResult)]
+testRenderUtils =
+  [ ( "mixAt inserts at offset",
+      let buf = mixAt Map.empty mixOffset [1.0, 2.0]
+       in assertApprox "mixAt val" 1.0 (Map.findWithDefault 0.0 mixOffset buf) 0.001
+    ),
+    ( "mixAt accumulates overlapping samples",
+      let buf1 = mixAt Map.empty 0 [1.0, 2.0]
+          buf2 = mixAt buf1 0 [0.5, 0.5]
+       in assertApprox "mixAt accum" 1.5 (Map.findWithDefault 0.0 0 buf2) 0.001
+    ),
+    ( "renderBuffer fills gaps with zero",
+      let buf = mixAt Map.empty renderBufOffset [1.0]
+       in case renderBuffer renderBufLen buf of
+            (firstSample : _) -> assertApprox "gap fill" 0.0 firstSample 0.001
+            [] -> Left "renderBuffer: empty"
+    ),
+    ( "renderBuffer correct length",
+      assertEqual "buf len" renderBufLen (length (renderBuffer renderBufLen Map.empty))
+    ),
+    ( "normalizeSignal empty is empty",
+      assertTrue "norm empty" (null (normalizeSignal 1.0 []))
+    ),
+    ( "renderSfx empty layers is empty",
+      assertTrue "sfx empty" (null (renderSfx 1.0 []))
+    ),
+    ( "layerWeighted empty is empty",
+      assertTrue "layer empty" (null (layerWeighted []))
+    )
+  ]
+  where
+    mixOffset :: Int
+    mixOffset = 5
+
+    renderBufOffset :: Int
+    renderBufOffset = 3
+
+    renderBufLen :: Int
+    renderBufLen = 5
+
+-- ---------------------------------------------------------------------------
+-- Synthesis edge case tests
+-- ---------------------------------------------------------------------------
+
+testSynthesisEdge :: [(String, TestResult)]
+testSynthesisEdge =
+  [ ( "silence zero is empty",
+      assertTrue "silence 0" (null (silence 0))
+    ),
+    ( "expDecay high rate is near zero",
+      assertTrue "fast decay" (expDecay 100.0 1.0 < 0.001)
+    ),
+    ( "attackDecay at attack boundary is 1.0",
+      assertApprox "attack top" 1.0 (attackDecay 0.5 5.0 0.5) 0.001
+    ),
+    ( "sineSweepAD output in range",
+      assertTrue
+        "sweepAD range"
+        (all (\s -> s >= -1.0 && s <= 1.0) (sineSweepAD 440.0 220.0 2.0 5.0 sweepSamples))
+    ),
+    ( "noiseBurst zero length is empty",
+      assertTrue "noise 0" (null (noiseBurst 10.0 0))
+    ),
+    ( "squareWaveDecay at t=0 has full amplitude",
+      case squareWaveDecay 440.0 0.0 squareTestLen of
+        (firstSample : _) -> assertApprox "square t0" 1.0 (abs firstSample) 0.001
+        [] -> Left "squareWaveDecay: empty"
+    )
+  ]
+  where
+    sweepSamples :: Int
+    sweepSamples = 500
+
+    squareTestLen :: Int
+    squareTestLen = 10
+
+-- ---------------------------------------------------------------------------
+-- Effects edge case tests
+-- ---------------------------------------------------------------------------
+
+testEffectsEdge :: [(String, TestResult)]
+testEffectsEdge =
+  [ ( "bitCrush empty is empty",
+      assertTrue "crush empty" (null (bitCrush 4 []))
+    ),
+    ( "echo empty signal produces delay-length silence",
+      assertEqual "echo empty len" echoDelaySingle (length (echo echoDelaySingle echoDecaySingle []))
+    ),
+    ( "fadeIn empty is empty",
+      assertTrue "fadeIn empty" (null (fadeIn 50 []))
+    ),
+    ( "fadeOut empty is empty",
+      assertTrue "fadeOut empty" (null (fadeOut 50 []))
+    ),
+    ( "reverseSignal empty is empty",
+      assertTrue "rev empty" (null (reverseSignal []))
+    ),
+    ( "reverseSignal singleton is identity",
+      assertEqual "rev single" [1.0] (reverseSignal [1.0])
+    ),
+    ( "mix single signal is itself",
+      assertEqual "mix single" [1.0, 2.0] (mix [[1.0, 2.0]])
+    ),
+    ( "echo single sample extends",
+      let result = echo echoDelaySingle echoDecaySingle [1.0]
+       in assertEqual "echo extend" (1 + echoDelaySingle) (length result)
+    )
+  ]
+  where
+    echoDelaySingle :: Int
+    echoDelaySingle = 10
+
+    echoDecaySingle :: Double
+    echoDecaySingle = 0.5
 
 -- ---------------------------------------------------------------------------
 -- Helpers
