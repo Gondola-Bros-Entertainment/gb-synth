@@ -7,7 +7,7 @@
 
 [![CI](https://github.com/Gondola-Bros-Entertainment/gb-synth/actions/workflows/ci.yml/badge.svg)](https://github.com/Gondola-Bros-Entertainment/gb-synth/actions/workflows/ci.yml)
 [![Hackage](https://img.shields.io/hackage/v/gb-synth.svg)](https://hackage.haskell.org/package/gb-synth)
-![Haskell](https://img.shields.io/badge/haskell-GHC%209.6-purple)
+![Haskell](https://img.shields.io/badge/haskell-GHC%209.8-purple)
 
 </p>
 </div>
@@ -21,12 +21,12 @@ gb-synth is a synthesis engine with a tracker-style song DSL for generating retr
 Companion to [gb-sprite](https://github.com/Gondola-Bros-Entertainment/gb-sprite) (procedural 2D graphics) and [gb-vector](https://github.com/Gondola-Bros-Entertainment/gb-vector) (SVG generation).
 
 **Features:**
-- 5 waveforms — sine, square, triangle, sawtooth, noise
+- 6 waveforms — sine, square, triangle, sawtooth, noise, pulse (variable duty cycle)
 - ADSR envelopes with 4 presets (percussive, shortPluck, longPad, organ)
 - Tracker-style step patterns with note sustain across rests
 - Structured songs with sections (intro/verse/chorus/outro) and repeats
 - 13 ready-to-use SFX presets (laser, explosion, coin, powerup, etc.)
-- Programmatic chord construction and progressions
+- Programmatic chord construction — triads and seventh chords, inversions, progressions
 - Post-processing effects (bitCrush, echo, fade, reverse, mix)
 - Pre-rendered drum samples (kick, snare, hihat)
 - 16-bit mono PCM WAV output
@@ -37,7 +37,7 @@ Companion to [gb-sprite](https://github.com/Gondola-Bros-Entertainment/gb-sprite
 
 ```
 src/GBSynth/
-├── Oscillator.hs   Sine, square, triangle, sawtooth, noise
+├── Oscillator.hs   Sine, square, triangle, sawtooth, noise, pulse
 ├── Envelope.hs     ADSR (attack/decay/sustain/release)
 ├── Instrument.hs   Synth (oscillator+ADSR) or Sample (pre-rendered buffer)
 ├── Pattern.hs      Tracker-style step grid (MOD/XM/IT inspired)
@@ -106,11 +106,14 @@ main = do
 ### Oscillator
 
 ```haskell
-data Waveform = Sine | Square | Triangle | Sawtooth | Noise
+data Waveform = Sine | Square | Triangle | Sawtooth | Noise | Pulse !Double
 
 oscillate :: Waveform -> Double -> Int -> [Double]  -- waveform, freq Hz, duration samples
 noteFreq  :: Int -> Double                           -- MIDI note → Hz (A4 = 440)
 ```
+
+`Pulse` takes a duty cycle (0.0–1.0). GB standard values: 0.125, 0.25, 0.5, 0.75.
+`Square` is equivalent to `Pulse 0.5`.
 
 ### Envelope
 
@@ -215,6 +218,7 @@ Programmatic chord construction from MIDI root notes:
 
 ```haskell
 data Quality = Major | Minor | Diminished | Augmented | Sus2 | Sus4
+             | Dominant7 | Major7 | Minor7 | Diminished7
 
 chord            :: Int -> Quality -> [Int]              -- root MIDI + quality → note list
 inversion        :: Int -> [Int] -> [Int]                -- nth inversion
@@ -225,6 +229,8 @@ pop1564      :: [(Int, [Int])]   -- I-V-vi-IV in C
 blues145     :: [(Int, [Int])]   -- I-IV-V in C
 minorClassic :: [(Int, [Int])]   -- i-iv-V in Am
 ```
+
+Seventh chords return 4-note lists. All work with `inversion` and `chordProgression`.
 
 ### Effects
 
@@ -328,7 +334,7 @@ Requires [GHCup](https://www.haskell.org/ghcup/) with GHC >= 9.6.
 
 ```bash
 cabal build                              # Build library
-cabal test                               # Run all tests (109 pure tests)
+cabal test                               # Run all tests (182 pure tests)
 cabal build --ghc-options="-Werror"      # Warnings as errors
 cabal haddock                            # Generate docs
 ```

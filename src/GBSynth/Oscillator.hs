@@ -1,7 +1,8 @@
 -- | Waveform oscillators and frequency utilities.
 --
--- Each oscillator produces normalised @[-1, 1]@ output with a running
--- phase accumulator.
+-- Each oscillator produces normalised @[-1, 1]@ output.
+-- Tonal waveforms use direct phase computation from the sample index;
+-- noise uses an LCG pseudo-random generator.
 module GBSynth.Oscillator
   ( -- * Waveform type
     Waveform (..),
@@ -18,23 +19,30 @@ import Data.Word (Word32)
 import GBSynth.WAV (sampleRate)
 
 -- | Available waveform shapes.
+--
+-- The Game Boy had two square-wave channels with variable duty cycle
+-- (12.5%, 25%, 50%, 75%). Use 'Pulse' to access all four; 'Square'
+-- is equivalent to @Pulse 0.5@.
 data Waveform
   = Sine
   | Square
   | Triangle
   | Sawtooth
   | Noise
+  | -- | Pulse wave with configurable duty cycle (0.0–1.0).
+    --   The duty cycle is the fraction of each period spent high.
+    --   GB standard values: 0.125, 0.25, 0.5, 0.75.
+    Pulse !Double
   deriving (Show, Eq)
 
 -- | Generate samples for the given waveform, frequency, and duration.
---
--- Uses a running phase accumulator so multi-cycle output stays coherent.
 oscillate :: Waveform -> Double -> Int -> [Double]
 oscillate Sine freq n = sineOsc freq n
-oscillate Square freq n = squareOsc freq n
+oscillate Square freq n = pulseOsc defaultDuty freq n
 oscillate Triangle freq n = triangleOsc freq n
 oscillate Sawtooth freq n = sawtoothOsc freq n
 oscillate Noise _freq n = noiseOsc n
+oscillate (Pulse duty) freq n = pulseOsc duty freq n
 
 -- | MIDI note number to frequency in Hz (A4 = 440 Hz).
 noteFreq :: Int -> Double
@@ -59,13 +67,16 @@ sineOsc freq n =
       phases = take n (drop 1 (scanl (+) 0.0 (repeat delta)))
    in map (\ph -> sin (ph * twoPi)) phases
 
--- | Square wave: +1 for first half of cycle, -1 for second half.
-squareOsc :: Double -> Int -> [Double]
-squareOsc freq n =
+-- | Pulse wave: +1 for the duty fraction of each cycle, -1 for the rest.
+--
+-- 'Square' delegates here with duty = 0.5.  GB duty values:
+-- 0.125 (thin buzz), 0.25 (nasal), 0.5 (hollow), 0.75 (nasal inverted).
+pulseOsc :: Double -> Double -> Int -> [Double]
+pulseOsc duty freq n =
   let srf = fromIntegral sampleRate
    in [ let phase = fromIntegral i * freq / srf
             frac = phase - fromIntegral (floor phase :: Int)
-         in if frac < 0.5 then 1.0 else -1.0
+         in if frac < duty then 1.0 else -1.0
       | i <- [0 .. n - 1]
       ]
 
@@ -106,6 +117,14 @@ noiseOsc n =
         lcgMultiplier = 1103515245
         lcgIncrement :: Word32
         lcgIncrement = 12345
+
+-- ---------------------------------------------------------------------------
+-- Constants
+-- ---------------------------------------------------------------------------
+
+-- | Default duty cycle for 'Square' (50%).
+defaultDuty :: Double
+defaultDuty = 0.5
 
 -- | 2 * pi, cached for readability.
 twoPi :: Double

@@ -48,6 +48,7 @@ import GBSynth.Synthesis
     squareWaveDecay,
   )
 import GBSynth.WAV (msToSamples, sampleRate, toSample, writeWav)
+import System.Directory (removeFile)
 import System.Exit (exitFailure, exitSuccess)
 import System.IO (hClose, hFlush, openTempFile, stdout)
 
@@ -138,6 +139,9 @@ main = do
         ++ testEffects
         ++ testEffectsEdge
         ++ testSong
+        ++ testPulseWaveform
+        ++ testSeventhChords
+        ++ testEnvelopeContinuity
     )
 
 -- ---------------------------------------------------------------------------
@@ -514,6 +518,7 @@ testWavRoundtrip = do
   hClose h
   writeWav path samples
   raw <- BS.readFile path
+  removeFile path
   let bytes = BS.unpack raw
   return
     [ ( "WAV file starts with RIFF",
@@ -1045,6 +1050,164 @@ testEffectsEdge =
 
     echoDecaySingle :: Double
     echoDecaySingle = 0.5
+
+-- ---------------------------------------------------------------------------
+-- Pulse waveform tests
+-- ---------------------------------------------------------------------------
+
+testPulseWaveform :: [(String, TestResult)]
+testPulseWaveform =
+  [ ( "Pulse 0.5 matches Square output",
+      assertEqual
+        "pulse=square"
+        (oscillate Square 440.0 pulseSamples)
+        (oscillate (Pulse 0.5) 440.0 pulseSamples)
+    ),
+    ( "Pulse 0.5 sample count",
+      assertEqual "pulse count" pulseSamples (length (oscillate (Pulse 0.5) 440.0 pulseSamples))
+    ),
+    ( "Pulse 0.25 sample count",
+      assertEqual "pulse25 count" pulseSamples (length (oscillate (Pulse 0.25) 440.0 pulseSamples))
+    ),
+    ( "Pulse 0.125 sample count",
+      assertEqual "pulse125 count" pulseSamples (length (oscillate (Pulse 0.125) 440.0 pulseSamples))
+    ),
+    ( "Pulse 0.75 sample count",
+      assertEqual "pulse75 count" pulseSamples (length (oscillate (Pulse 0.75) 440.0 pulseSamples))
+    ),
+    ( "Pulse output in {-1, 1}",
+      assertTrue
+        "pulse values"
+        ( all
+            (\s -> s == 1.0 || s == -1.0)
+            (oscillate (Pulse 0.25) 440.0 pulseSamples)
+        )
+    ),
+    ( "Pulse 0.25 has fewer high samples than Pulse 0.75",
+      let countHigh = length . filter (== 1.0)
+          narrow = countHigh (oscillate (Pulse 0.25) 440.0 pulseSamples)
+          wide = countHigh (oscillate (Pulse 0.75) 440.0 pulseSamples)
+       in assertTrue "narrow < wide" (narrow < wide)
+    ),
+    ( "Pulse 0.125 GB thin buzz duty",
+      let highs = length (filter (== 1.0) (oscillate (Pulse gbDutyThin) 440.0 pulseSamples))
+          ratio = fromIntegral highs / fromIntegral pulseSamples :: Double
+       in assertTrue "~12.5% high" (ratio > 0.10 && ratio < 0.16)
+    )
+  ]
+  where
+    pulseSamples :: Int
+    pulseSamples = 1000
+
+    gbDutyThin :: Double
+    gbDutyThin = 0.125
+
+-- ---------------------------------------------------------------------------
+-- Seventh chord tests
+-- ---------------------------------------------------------------------------
+
+testSeventhChords :: [(String, TestResult)]
+testSeventhChords =
+  [ ( "Dominant7 intervals: root, +4, +7, +10",
+      assertEqual "C7" [60, 64, 67, 70] (chord middleC Dominant7)
+    ),
+    ( "Major7 intervals: root, +4, +7, +11",
+      assertEqual "Cmaj7" [60, 64, 67, 71] (chord middleC Major7)
+    ),
+    ( "Minor7 intervals: root, +3, +7, +10",
+      assertEqual "Am7" [57, 60, 64, 67] (chord concertA Minor7)
+    ),
+    ( "Diminished7 intervals: root, +3, +6, +9",
+      assertEqual "Bdim7" [59, 62, 65, 68] (chord 59 Diminished7)
+    ),
+    ( "Seventh chord has 4 notes",
+      assertEqual "7th len" seventhLen (length (chord middleC Dominant7))
+    ),
+    ( "Triad has 3 notes",
+      assertEqual "triad len" triadLen (length (chord middleC Major))
+    ),
+    ( "Seventh chord inversion 1",
+      assertEqual "C7/E" [64, 67, 70, 72] (inversion 1 (chord middleC Dominant7))
+    ),
+    ( "Seventh chord inversion 3",
+      assertEqual "C7/Bb" [70, 72, 76, 79] (inversion 3 (chord middleC Dominant7))
+    ),
+    ( "Major7 progression",
+      let prog = chordProgression [(60, Major7), (65, Dominant7)]
+       in assertEqual "prog7 len" progLen (length prog)
+    )
+  ]
+  where
+    middleC :: Int
+    middleC = 60
+
+    concertA :: Int
+    concertA = 57
+
+    seventhLen :: Int
+    seventhLen = 4
+
+    triadLen :: Int
+    triadLen = 3
+
+    progLen :: Int
+    progLen = 2
+
+-- ---------------------------------------------------------------------------
+-- Envelope continuity tests
+-- ---------------------------------------------------------------------------
+
+testEnvelopeContinuity :: [(String, TestResult)]
+testEnvelopeContinuity =
+  [ ( "envelope continuous when noteOn < attack+decay",
+      -- shortPluck: attack=110 samples, decay=3308 samples, sustain=0.3
+      -- noteOn=2000 is during decay phase — release must start from actual level
+      let env = renderEnvelope shortPluck shortNoteOn envTotal
+          atNoteOff = env !! shortNoteOn
+          afterNoteOff = env !! (shortNoteOn + 1)
+          levelJump = abs (atNoteOff - afterNoteOff)
+       in assertTrue "no discontinuity" (levelJump < continuityThreshold)
+    ),
+    ( "envelope release starts from actual level (not sustain)",
+      -- At noteOn=2000 with shortPluck, decay is still running
+      -- Level should be > sustain (0.3)
+      let env = renderEnvelope shortPluck shortNoteOn envTotal
+          releaseStart = env !! shortNoteOn
+       in assertTrue "release > sustain" (releaseStart > 0.5)
+    ),
+    ( "envelope continuous when noteOn < attack",
+      -- Very short note: noteOn during attack phase
+      let env = renderEnvelope shortPluck tinyNoteOn envTotal
+          atNoteOff = env !! tinyNoteOn
+          afterNoteOff = env !! (tinyNoteOn + 1)
+          levelJump = abs (atNoteOff - afterNoteOff)
+       in assertTrue "attack cutoff smooth" (levelJump < continuityThreshold)
+    ),
+    ( "envelope normal case still works",
+      -- noteOn=5000 — well past attack+decay, in sustain
+      let env = renderEnvelope shortPluck normalNoteOn envTotal
+          atSustain = env !! sustainCheckIdx
+       in assertApprox "sustain level" 0.3 atSustain 0.05
+    )
+  ]
+  where
+    shortNoteOn :: Int
+    shortNoteOn = 2000
+
+    tinyNoteOn :: Int
+    tinyNoteOn = 50
+
+    normalNoteOn :: Int
+    normalNoteOn = 5000
+
+    envTotal :: Int
+    envTotal = 8000
+
+    sustainCheckIdx :: Int
+    sustainCheckIdx = 4000
+
+    continuityThreshold :: Double
+    continuityThreshold = 0.01
 
 -- ---------------------------------------------------------------------------
 -- Helpers

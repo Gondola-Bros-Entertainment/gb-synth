@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.1.0
+
+### New Features
+
+- **Pulse waveform with variable duty cycle.** `Pulse !Double` constructor on `Waveform`. Supports the four Game Boy duty cycles (0.125, 0.25, 0.5, 0.75). `Square` now delegates to `Pulse 0.5` — fully backwards compatible.
+- **Seventh chords.** Four new `Quality` constructors: `Dominant7`, `Major7`, `Minor7`, `Diminished7`. All work with `chord`, `inversion`, and `chordProgression`.
+
+### Bug Fixes
+
+- Fix envelope discontinuity on fast notes. When note-on is shorter than attack+decay, the release now starts from the actual envelope level instead of jumping to the sustain level.
+- Fix duplicated envelope logic in Instrument: `renderNote` now delegates to `Envelope.renderEnvelope` instead of reimplementing the ADSR curve.
+- Fix hardcoded sample rate (22050) in Envelope — now uses `sampleRate` from WAV module.
+- Fix remaining Envelope field docs: `adsrDecay` and `adsrRelease` described as "exponential" but implementation is linear.
+
+### Documentation
+
+- Update README: test count, GHC badge 9.6 → 9.8, Pulse and seventh chord API docs.
+
+### Internal
+
+- CI: add Haddock step before build (fixes stale `.hi` file coverage), upgrade GHC 9.6 → 9.8.
+- Tests: clean up temporary WAV files after roundtrip test.
+- 182 pure tests (up from 161).
+
 ## 0.2.0.2
 
 - Change license from MIT to BSD-3-Clause.

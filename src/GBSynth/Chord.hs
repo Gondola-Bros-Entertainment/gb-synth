@@ -3,6 +3,9 @@
 -- Build chords, inversions, and progressions without hand-coding
 -- MIDI arrays. Replaces patterns like @[(57, [57, 60, 64])]@ with
 -- @chord 57 Minor@.
+--
+-- Supports triads (Major, Minor, Diminished, Augmented, Sus2, Sus4)
+-- and seventh chords (Dominant7, Major7, Minor7, Diminished7).
 module GBSynth.Chord
   ( -- * Types
     Quality (..),
@@ -33,6 +36,14 @@ data Quality
     Sus2
   | -- | Root, perfect fourth (+5), perfect fifth (+7)
     Sus4
+  | -- | Root, major third (+4), perfect fifth (+7), minor seventh (+10)
+    Dominant7
+  | -- | Root, major third (+4), perfect fifth (+7), major seventh (+11)
+    Major7
+  | -- | Root, minor third (+3), perfect fifth (+7), minor seventh (+10)
+    Minor7
+  | -- | Root, minor third (+3), diminished fifth (+6), diminished seventh (+9)
+    Diminished7
   deriving (Show, Eq)
 
 -- | Build a chord from a root MIDI note and quality.
@@ -44,6 +55,9 @@ data Quality
 --
 -- >>> chord 57 Minor
 -- [57, 60, 64]
+--
+-- >>> chord 60 Dominant7
+-- [60, 64, 67, 70]
 chord :: Int -> Quality -> [Int]
 chord root quality = map (root +) (intervals quality)
 
@@ -55,6 +69,10 @@ intervals Diminished = [0, minorThird, diminishedFifth]
 intervals Augmented = [0, majorThird, augmentedFifth]
 intervals Sus2 = [0, majorSecond, perfectFifth]
 intervals Sus4 = [0, perfectFourth, perfectFifth]
+intervals Dominant7 = [0, majorThird, perfectFifth, minorSeventh]
+intervals Major7 = [0, majorThird, perfectFifth, majorSeventh]
+intervals Minor7 = [0, minorThird, perfectFifth, minorSeventh]
+intervals Diminished7 = [0, minorThird, diminishedFifth, diminishedSeventh]
 
 -- | Apply an inversion to a chord voicing.
 --
@@ -148,6 +166,18 @@ augmentedFifth = 8
 -- | Major sixth: 9 semitones.
 majorSixth :: Int
 majorSixth = 9
+
+-- | Diminished seventh: 9 semitones (enharmonic with major sixth).
+diminishedSeventh :: Int
+diminishedSeventh = 9
+
+-- | Minor seventh: 10 semitones.
+minorSeventh :: Int
+minorSeventh = 10
+
+-- | Major seventh: 11 semitones.
+majorSeventh :: Int
+majorSeventh = 11
 
 -- | Semitones per octave.
 semitonesPerOctave :: Int

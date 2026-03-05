@@ -17,15 +17,17 @@ module GBSynth.Envelope
   )
 where
 
+import GBSynth.WAV (sampleRate)
+
 -- | ADSR envelope parameters.
 data ADSR = ADSR
   { -- | Seconds for linear ramp from 0 to 1
     adsrAttack :: !Double,
-    -- | Seconds for exponential decay from 1 to sustain level
+    -- | Seconds for linear decay from 1 to sustain level
     adsrDecay :: !Double,
     -- | Hold level during sustain phase (0.0–1.0)
     adsrSustain :: !Double,
-    -- | Seconds for exponential decay from sustain to 0
+    -- | Seconds for linear decay from sustain to 0
     adsrRelease :: !Double
   }
   deriving (Show, Eq)
@@ -35,6 +37,10 @@ data ADSR = ADSR
 -- @renderEnvelope adsr noteOnSamples totalSamples@ produces a list of
 -- @totalSamples@ amplitude values. The attack+decay+sustain occupy
 -- @noteOnSamples@, and the release fills the remainder.
+--
+-- If the note-on period is shorter than attack+decay, the decay is
+-- truncated at note-off and the release starts from the actual level
+-- at that point — no discontinuity.
 renderEnvelope :: ADSR -> Int -> Int -> [Double]
 renderEnvelope adsr noteOnSamples totalSamples =
   [envelopeAt adsr noteOnSamples i | i <- [0 .. totalSamples - 1]]
@@ -47,29 +53,39 @@ envelopeAt (ADSR attack decay sustain release) noteOnSamples i
       if attackSamples > 0
         then fromIntegral i / fromIntegral attackSamples
         else 1.0
-  | i < attackSamples + decaySamples =
-      -- Decay: exponential 1 → sustain
-      let elapsed = fromIntegral (i - attackSamples) / fromIntegral decaySamples
+  | i < decayEnd =
+      -- Decay: linear 1 → sustain (capped at noteOn)
+      let elapsed = fromIntegral (i - attackSamples) / fromIntegral (max 1 decaySamples)
        in 1.0 + (sustain - 1.0) * elapsed
   | i < noteOnSamples =
       -- Sustain: hold at sustain level
       sustain
   | otherwise =
-      -- Release: exponential sustain → 0
+      -- Release: linear from note-off level → 0
       let releaseSamples = max 1 (secondsToSamples release)
           elapsed = fromIntegral (i - noteOnSamples) / fromIntegral releaseSamples
-          level = sustain * (1.0 - elapsed)
-       in max 0.0 level
+       in max 0.0 (noteOffLevel * (1.0 - elapsed))
   where
     attackSamples = secondsToSamples attack
     decaySamples = secondsToSamples decay
 
--- | Convert seconds to sample count (at 22050 Hz).
+    -- Decay phase ends at the earlier of attack+decay or noteOn
+    decayEnd = min (attackSamples + decaySamples) noteOnSamples
+
+    -- Actual envelope level at the note-off point
+    noteOffLevel
+      | noteOnSamples <= attackSamples =
+          if attackSamples > 0
+            then fromIntegral noteOnSamples / fromIntegral attackSamples
+            else 1.0
+      | noteOnSamples <= attackSamples + decaySamples =
+          let elapsed = fromIntegral (noteOnSamples - attackSamples) / fromIntegral (max 1 decaySamples)
+           in 1.0 + (sustain - 1.0) * elapsed
+      | otherwise = sustain
+
+-- | Convert seconds to sample count.
 secondsToSamples :: Double -> Int
-secondsToSamples s = round (s * sampleRateF)
-  where
-    sampleRateF :: Double
-    sampleRateF = 22050.0
+secondsToSamples s = round (s * fromIntegral sampleRate)
 
 -- ---------------------------------------------------------------------------
 -- Presets
